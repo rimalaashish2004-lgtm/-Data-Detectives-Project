@@ -1,0 +1,1215 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TGF Shipboard Data Analysis Workbench (2075)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        tgf: {
+                            dark: '#0b0f19',
+                            card: '#131c2e',
+                            border: '#1e293b',
+                            accent: '#38bdf8',
+                            glow: '#0ea5e9',
+                            success: '#10b981',
+                            warning: '#f59e0b',
+                            danger: '#ef4444'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Papa Parse for robust CSV parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <!-- Chart.js for T5 visualizer -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0b0f19; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #38bdf8; }
+    </style>
+</head>
+<body class="bg-tgf-dark text-slate-100 min-h-screen flex flex-col">
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2"></div>
+
+    <!-- Header / Nav -->
+    <header class="bg-tgf-card border-b border-tgf-border px-6 py-4 flex items-center justify-between sticky top-0 z-40">
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-tgf-accent to-blue-600 flex items-center justify-center shadow-lg shadow-sky-500/20">
+                <i class="fa-solid fa-microchip-ai text-white text-lg"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg tracking-wide flex items-center gap-2">
+                    TGF ANALYTICS WORKBENCH <span class="text-xs bg-sky-500/20 text-sky-400 px-2 py-0.5 rounded border border-sky-500/30">v4.8-REV</span>
+                </h1>
+                <p class="text-xs text-slate-400">AI Mind "Far Too Curious" • Operational Deck 2075</p>
+            </div>
+        </div>
+        <div class="flex items-center space-x-3">
+            <span id="dataset-status" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 text-slate-400 border border-tgf-border flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-amber-500"></span> No Dataset Loaded
+            </span>
+            <button onclick="loadSampleData()" class="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-medium rounded-lg border border-tgf-border transition flex items-center gap-2">
+                <i class="fa-solid fa-database"></i> Load Sample Data
+            </button>
+        </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="bg-tgf-card/60 backdrop-blur border-b border-tgf-border px-6 flex space-x-2 overflow-x-auto">
+        <button onclick="switchTab('t1')" id="btn-t1" class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-tgf-accent text-tgf-accent flex items-center gap-2 whitespace-nowrap transition">
+            <i class="fa-solid fa-file-arrow-up"></i> T1: Upload & Schema
+        </button>
+        <button onclick="switchTab('t2')" id="btn-t2" class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap transition">
+            <i class="fa-solid fa-magnifying-glass"></i> T2: Explorer & Filter
+        </button>
+        <button onclick="switchTab('t3')" id="btn-t3" class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap transition">
+            <i class="fa-solid fa-triangle-exclamation"></i> T3: Quality Inspector
+        </button>
+        <button onclick="switchTab('t4')" id="btn-t4" class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap transition">
+            <i class="fa-solid fa-calculator"></i> T4: Descriptive Stats
+        </button>
+        <button onclick="switchTab('t5')" id="btn-t5" class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap transition">
+            <i class="fa-solid fa-chart-line"></i> T5: Outliers & Charts
+        </button>
+        <button onclick="switchTab('t6')" id="btn-t6" class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2 whitespace-nowrap transition">
+            <i class="fa-solid fa-file-export"></i> T6: Clean & Export
+        </button>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 p-6 max-w-7xl mx-auto w-full">
+
+        <!-- TAB 1: T1 Upload & Schema -->
+        <section id="sec-t1" class="tab-content space-y-6">
+            <div class="bg-tgf-card border border-tgf-border rounded-2xl p-6 shadow-xl">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h2 class="text-lg font-bold flex items-center gap-2 text-slate-100">
+                            <i class="fa-solid fa-cloud-arrow-up text-tgf-accent"></i> T1: CSV Upload & Schema Detection
+                        </h2>
+                        <p class="text-xs text-slate-400">Upload mission logs or telemetry CSVs. The analyzer auto-detects column data types and indexes records.</p>
+                    </div>
+                </div>
+
+                <!-- Dropzone -->
+                <div id="dropzone" class="border-2 border-dashed border-tgf-border hover:border-tgf-accent rounded-xl p-8 text-center cursor-pointer transition bg-slate-900/40 relative">
+                    <input type="file" id="csv-file-input" accept=".csv" class="absolute inset-0 opacity-0 cursor-pointer">
+                    <div class="flex flex-col items-center justify-center space-y-3">
+                        <div class="w-16 h-16 rounded-full bg-sky-500/10 flex items-center justify-center text-tgf-accent text-2xl">
+                            <i class="fa-solid fa-file-csv"></i>
+                        </div>
+                        <div>
+                            <p class="font-medium text-sm">Drag & drop your CSV file here, or <span class="text-tgf-accent underline">browse</span></p>
+                            <p class="text-xs text-slate-500 mt-1">Supports standard CSV format with headers</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary & Schema Overview -->
+            <div id="schema-container" class="hidden grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="bg-tgf-card border border-tgf-border rounded-xl p-4">
+                    <p class="text-xs text-slate-400">Total Records</p>
+                    <p id="stat-total-rows" class="text-2xl font-bold text-tgf-accent mt-1">0</p>
+                </div>
+                <div class="bg-tgf-card border border-tgf-border rounded-xl p-4">
+                    <p class="text-xs text-slate-400">Total Columns</p>
+                    <p id="stat-total-cols" class="text-2xl font-bold text-indigo-400 mt-1">0</p>
+                </div>
+                <div class="bg-tgf-card border border-tgf-border rounded-xl p-4">
+                    <p class="text-xs text-slate-400">Memory Footprint</p>
+                    <p id="stat-memory" class="text-2xl font-bold text-emerald-400 mt-1">0 KB</p>
+                </div>
+                <div class="bg-tgf-card border border-tgf-border rounded-xl p-4">
+                    <p class="text-xs text-slate-400">Integrity Status</p>
+                    <p id="stat-integrity" class="text-2xl font-bold text-amber-400 mt-1">Pending Audit</p>
+                </div>
+            </div>
+
+            <!-- Schema Table -->
+            <div id="schema-table-card" class="hidden bg-tgf-card border border-tgf-border rounded-2xl p-6 shadow-xl">
+                <h3 class="font-semibold text-sm mb-3 text-slate-200">Column Schema & Auto-Suggested Data Types</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-900/80 text-slate-400 uppercase tracking-wider">
+                            <tr>
+                                <th class="p-3">Column Name</th>
+                                <th class="p-3">Suggested Type</th>
+                                <th class="p-3">Sample Values</th>
+                                <th class="p-3">Non-Null Count</th>
+                            </tr>
+                        </thead>
+                        <tbody id="schema-table-body" class="divide-y divide-tgf-border">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Raw Preview Table -->
+            <div id="raw-preview-card" class="hidden bg-tgf-card border border-tgf-border rounded-2xl p-6 shadow-xl">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="font-semibold text-sm text-slate-200">Raw Data Preview (First 50 Records)</h3>
+                    <span class="text-xs text-slate-400" id="preview-count-label"></span>
+                </div>
+                <div class="overflow-x-auto max-h-96">
+                    <table class="w-full text-left text-xs whitespace-nowrap">
+                        <thead id="raw-table-head" class="bg-slate-900/80 text-slate-400 sticky top-0 z-10"></thead>
+                        <tbody id="raw-table-body" class="divide-y divide-tgf-border"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 2: T2 Explorer & Filter -->
+        <section id="sec-t2" class="tab-content hidden space-y-6">
+            <div class="bg-tgf-card border border-tgf-border rounded-2xl p-6 shadow-xl space-y-4">
+                <div class="flex flex-col md:flex-row gap-4 items-center justify-between">
+                    <div>
+                        <h2 class="text-lg font-bold flex items-center gap-2 text-slate-100">
+                            <i class="fa-solid fa-magnifying-glass text-tgf-accent"></i> T2: Search, Sort & Filter
+                        </h2>
+                        <p class="text-xs text-slate-400">Query records across multiple parameters. Inspect complete descriptions and notes.</p>
+                    </div>
+                    <div class="flex items-center gap-2 w-full md:w-auto">
+                        <div class="relative flex-1 md:w-64">
+                            <i class="fa-solid fa-search absolute left-3 top-3 text-slate-500 text-xs"></i>
+                            <input type="text" id="t2-search" placeholder="Search all fields..." oninput="filterAndRenderT2()" class="w-full bg-slate-900 border border-tgf-border rounded-xl pl-9 pr-4 py-2 text-xs text-slate-200 focus:outline-none focus:border-tgf-accent">
+                        </div>
+                        <select id="t2-sort-col" onchange="filterAndRenderT2()" class="bg-slate-900 border border-tgf-border rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-tgf-accent">
+                            <option value="">Sort by Column...</option>
+                        </select>
+                        <select id="t2-sort-dir" onchange="filterAndRenderT2()" class="bg-slate-900 border border-tgf-border rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-tgf-accent">
+                            <option value="asc">Ascending</option>
+                            <option value="desc">Descending</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Filter Builder Bar -->
+                <div class="flex flex-wrap items-center gap-3 pt-2 border-t border-tgf-border">
+                    <span class="text-xs text-slate-400 font-medium"><i class="fa-solid fa-filter mr-1"></i> Quick Filters:</span>
+                    <select id="t2-filter-col" class="bg-slate-900 border border-tgf-border rounded-lg px-2.5 py-1.5 text-xs text-slate-200">
+                        <option value="">Select Column...</option>
+                    </select>
+                    <input type="text" id="t2-filter-val" placeholder="Filter value..." class="bg-slate-900 border border-tgf-border rounded-lg px-3 py-1.5 text-xs text-slate-200">
+                    <button onclick="applyT2Filter()" class="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-xs font-medium rounded-lg transition text-white">Apply Filter</button>
+                    <button onclick="clearT2Filter()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-medium rounded-lg transition text-slate-300">Reset</button>
+                    <span id="t2-match-count" class="text-xs text-slate-400 ml-auto">Showing 0 records</span>
+                </div>
+            </div>
+
+            <!-- Explorer Table -->
+            <div class="bg-tgf-card border border-tgf-border rounded-2xl p-6 shadow-xl">
+                <div class="overflow-x-auto max-h-[500px]">
+                    <table class="w-full text-left text-xs">
+                        <thead id="t2-table-head" class="bg-slate-900/80 text-slate-400 sticky top-0 z-10"></thead>
+                        <tbody id="t2-table-body" class="divide-y divide-tgf-border">
+                            <tr><td colspan="100" class="text-center py-8 text-slate-500">No data loaded or matching query.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 3: T3 Quality Inspector -->
+        <section id="sec-t3" class="tab-content hidden space-y-6">
+            <div class="bg-tgf-card border border-tgf-border rounded-2xl p-6 shadow-xl space-y-4">
+                <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-lg font-bold flex items-center gap-2 text-slate-100">
+                            <i class="fa-solid fa-triangle-exclamation text-amber-400"></i> T3: Data Quality Inspector
+                        </h2>
+                        <p class="text-xs text-slate-400">Detect duplicates, missing/invalid values, and conflicting IDs. Apply manual edits or automated correction rules.</p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <button onclick="runQualityAudit()" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-xs font-semibold rounded-xl text-white transition flex items-center gap-2 shadow-lg shadow-amber-600/20">
+                            <i class="fa-solid fa-stethoscope"></i> Run Quality Audit
+                        </button>
+                        <button onclick="applyAutoCorrections()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold rounded-xl text-white transition flex items-center gap-2 shadow-lg shadow-emerald-600/20">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> Apply Auto-Correction Rules
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Audit Summary Cards -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
+                    <div class="bg-slate-900/60 border border-tgf-border rounded-xl p-4">
+                        <p class="text-xs text-slate-400">Duplicate Records</p>
+                        <p id="audit-dup-count" class="text-xl font-bold text-amber-400 mt-1">0</p>
+                    </div>
+                    <div class="bg-slate-900/60 border border-tgf-border rounded-xl p-4">
+                        <p class="text-xs text-slate-400">Missing Values</p>
+                        <p id="audit-missing-count" class="text-xl font-bold text-rose-400 mt-1">0</p>
+                    </div>
+                    <div class="bg-slate-900/60 border border-tgf-border rounded-xl p-4">
+                        <p class="text-xs text-slate-400">Invalid Values</p>
+                        <p id="audit-invalid-count" class="text-xl font-bold text-orange-400 mt-1">0</p>
+                    </div>
+                    <div class="bg-slate-900/60 border border-tgf-border rounded-xl p-4">
+                        <p class="text-xs text-slate-400">Conflicting IDs</p>
+                        <p id="audit-conflict-count" class="text-xl font-bold text-purple-400 mt-1">0</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Issues Detail Table / Inspector -->
+            <div class="bg-tgf-card border border-tgf-border rounded-2xl p-6 shadow-xl space-y-4">
+                <div class="flex items-center justify-between">
+                    <h3 class="font-semibold text-sm text-slate-200">Detected Anomalies & Manual Cell Editor</h3>
+                    <div class="flex items-center gap-2 text-xs">
+                        <span class="text-slate-400">Filter Issue Type:</span>
+                        <select id="issue-filter" onchange="renderQualityIssues()" class="bg-slate-900 border border-tgf-border rounded-lg px-2.5 py-1 text-xs text-slate-200">
+                            <option value="all">All Issues</option>
+                            <option value="duplicate">Duplicates</option>
+                            <option value="missing">Missing Values</option>
+                            <option value="invalid">Invalid Values</option>
+                            <option value="conflict">Conflicting IDs</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="overflow-x-auto max-h-[400px]">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-900/80 text-slate-400 sticky top-0 z-10">
+                            <tr>
+                                <th class="p-3">Row #</th>
+                                <th class="p-3">Issue Type</th>
+                                <th class="p-3">Column</th>
+                                <th class="p-3">Current Value</th>
+                                <th class="p-3">Suggested Correction / Edit</th>
+                                <th class="p-3 text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="quality-issues-tbody" class="divide-y divide-tgf-border">
+                            <tr><td colspan="6" class="text-center py-6 text-slate-500">Run audit to detect data quality anomalies.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 4: T4 Descriptive Stats -->
+        <section id="sec-t4" class="tab-content hidden space-y-6">
+            <div class="bg-tgf-card border border-tgf-border rounded-2xl p-6 shadow-xl space-y-4">
+                <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-lg font-bold flex items-center gap-2 text-slate-100">
+                            <i class="fa-solid fa-calculator text-indigo-400"></i> T4: Descriptive Statistics Engine
+                        </h2>
+                        <p class="text-xs text-slate-400">Calculate comprehensive statistical parameters for any numeric column in the active dataset.</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs text-slate-400">Select Numeric Column:</span>
+                        <select id="t4-col-select" onchange="calculateStats()" class="bg-slate-900 border border-tgf-border rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-tgf-accent">
+                            <option value="">Choose Column...</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Stats Grid -->
+                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 pt-2">
+                    <div class="bg-slate-900/60 border border-tgf-border rounded-xl p-4">
+                        <p class="text-xs text-slate-400">Count (N)</p>
+                        <p id="stat-count" class="text-xl font-bold text-slate-100 mt-1">-</p>
+                    </div>
+                    <div class="bg-slate-900/60 border border-tgf-border rounded-xl p-4">
+                        <p class="text-xs text-slate-400">Total (Sum)</p>
+                        <p id="stat-total" class="text-xl font-bold text-indigo-400 mt-1">-</p>
+                    </div>
+                    <div class="bg-slate-900/60 border border-tgf-border rounded-xl p-4">
+                        <p class="text-xs text-slate-400">Mean (Average)</p>
+                        <p id="stat-mean" class="text-xl font-bold text-tgf-accent mt-1">-</p>
+                    </div>
+                    <div class="bg-slate-900/60 border border-tgf-border rounded-xl p-4">
+                        <p class="text-xs text-slate-400">Median</p>
+                        <p id="stat-median" class="text-xl font-bold text-emerald-400 mt-1">-</p>
+                    </div>
+                    <div class="bg-slate-900/60 border border-tgf-border rounded-xl p-4">
+                        <p class="text-xs text-slate-400">Mode</p>
+                        <p id="stat-mode" class="text-xl font-bold text-amber-400 mt-1">-</p>
+                    </div>
+                    <div class="bg-slate-900/60 border border-tgf-border rounded-xl p-4">
+                        <p class="text-xs text-slate-400">Minimum</p>
+                        <p id="stat-min" class="text-xl font-bold text-cyan-400 mt-1">-</p>
+                    </div>
+                    <div class="bg-slate-900/60 border border-tgf-border rounded-xl p-4">
+                        <p class="text-xs text-slate-400">Maximum</p>
+                        <p id="stat-max" class="text-xl font-bold text-rose-400 mt-1">-</p>
+                    </div>
+                    <div class="bg-slate-900/60 border border-tgf-border rounded-xl p-4">
+                        <p class="text-xs text-slate-400">Range</p>
+                        <p id="stat-range" class="text-xl font-bold text-purple-400 mt-1">-</p>
+                    </div>
+                    <div class="bg-slate-900/60 border border-tgf-border rounded-xl p-4 sm:col-span-2 lg:col-span-2">
+                        <p class="text-xs text-slate-400">Population Std Dev (σ)</p>
+                        <p id="stat-stddev" class="text-xl font-bold text-orange-400 mt-1">-</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 5: T5 Outliers & Charts -->
+        <section id="sec-t5" class="tab-content hidden space-y-6">
+            <div class="bg-tgf-card border border-tgf-border rounded-2xl p-6 shadow-xl space-y-4">
+                <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-lg font-bold flex items-center gap-2 text-slate-100">
+                            <i class="fa-solid fa-chart-line text-emerald-400"></i> T5: Outliers (1.5x IQR) & Visualizer
+                        </h2>
+                        <p class="text-xs text-slate-400">Detect inclusive quartile outliers and compare statistical metrics with vs. without outliers using identical fences.</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs text-slate-400">Select Column:</span>
+                        <select id="t5-col-select" onchange="runOutlierAnalysis()" class="bg-slate-900 border border-tgf-border rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-tgf-accent">
+                            <option value="">Choose Column...</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Outlier Metrics Comparison -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-slate-900/60 border border-tgf-border rounded-xl p-4">
+                        <p class="text-xs text-slate-400">Outliers Detected (1.5x IQR)</p>
+                        <p id="outlier-count" class="text-2xl font-bold text-rose-400 mt-1">0</p>
+                        <p id="outlier-fences" class="text-[11px] text-slate-500 mt-1">Fences: Q1 - -, Q3 + -</p>
+                    </div>
+                    <div class="bg-slate-900/60 border border-tgf-border rounded-xl p-4">
+                        <p class="text-xs text-slate-400">Mean: With vs. Without Outliers</p>
+                        <p id="outlier-mean-comp" class="text-lg font-bold text-tgf-accent mt-1">- vs -</p>
+                    </div>
+                    <div class="bg-slate-900/60 border border-tgf-border rounded-xl p-4">
+                        <p class="text-xs text-slate-400">Std Dev: With vs. Without Outliers</p>
+                        <p id="outlier-std-comp" class="text-lg font-bold text-indigo-400 mt-1">- vs -</p>
+                    </div>
+                </div>
+
+                <!-- Chart Container -->
+                <div class="bg-slate-900/80 border border-tgf-border rounded-xl p-4 h-80 relative flex items-center justify-center">
+                    <canvas id="t5-chart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 6: T6 Export & Change Log -->
+        <section id="sec-t6" class="tab-content hidden space-y-6">
+            <div class="bg-tgf-card border border-tgf-border rounded-2xl p-6 shadow-xl space-y-4">
+                <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-lg font-bold flex items-center gap-2 text-slate-100">
+                            <i class="fa-solid fa-file-export text-cyan-400"></i> T6: Cleaned CSV Export & Change Log
+                        </h2>
+                        <p class="text-xs text-slate-400">Review the immutable change log and export cleaned datasets with duplicate removal and corrective modifications.</p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <button onclick="exportCleanedCSV()" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-xs font-semibold rounded-xl text-white transition flex items-center gap-2 shadow-lg shadow-cyan-600/20">
+                            <i class="fa-solid fa-download"></i> Export Cleaned CSV
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Change Log Table -->
+                <div class="space-y-3 pt-2">
+                    <h3 class="font-semibold text-sm text-slate-200">Mutation & Correction Change Log (Original Data Preserved)</h3>
+                    <div class="overflow-x-auto max-h-[400px]">
+                        <table class="w-full text-left text-xs">
+                            <thead class="bg-slate-900/80 text-slate-400 sticky top-0 z-10">
+                                <tr>
+                                    <th class="p-3">Timestamp</th>
+                                    <th class="p-3">Row Index</th>
+                                    <th class="p-3">Column</th>
+                                    <th class="p-3">Original Value</th>
+                                    <th class="p-3">New Value</th>
+                                    <th class="p-3">Method / Rule</th>
+                                    <th class="p-3">Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody id="changelog-tbody" class="divide-y divide-tgf-border">
+                                <tr><td colspan="7" class="text-center py-6 text-slate-500">No modifications recorded yet. Original data remains pristine.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Modal for Expandable Long Text / Notes -->
+    <div id="text-modal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-tgf-card border border-tgf-border rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+            <div class="flex items-center justify-between">
+                <h3 id="modal-title" class="font-bold text-sm text-slate-100">Record Inspection</h3>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-slate-100"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div id="modal-body" class="bg-slate-900 p-4 rounded-xl text-xs text-slate-300 max-h-80 overflow-y-auto whitespace-pre-wrap"></div>
+            <div class="flex justify-end">
+                <button onclick="closeModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-medium rounded-xl text-slate-200">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Script Logic -->
+    <script>
+        // Global State
+        let originalData = []; // Pristine copy
+        let workingData = [];  // Mutated working copy
+        let columns = [];
+        let columnTypes = {};
+        let changeLog = [];
+        let qualityIssues = [];
+        let activeTab = 't1';
+        let t5ChartInstance = null;
+
+        // Toast notification system
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const bgCol = type === 'success' ? 'bg-emerald-600' : type === 'warning' ? 'bg-amber-600' : type === 'danger' ? 'bg-rose-600' : 'bg-sky-600';
+            toast.className = `${bgCol} text-white px-4 py-3 rounded-xl text-xs shadow-xl flex items-center gap-3 transition transform translate-y-2 opacity-0`;
+            toast.innerHTML = `<i class="fa-solid fa-circle-info"></i><span>${message}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => { toast.classList.remove('translate-y-2', 'opacity-0'); }, 10);
+            setTimeout(() => {
+                toast.classList.add('translate-y-2', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+
+        // Tab Switching
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('border-tgf-accent', 'text-tgf-accent');
+                btn.classList.add('border-transparent', 'text-slate-400');
+            });
+            document.getElementById(`sec-${tabId}`).classList.remove('hidden');
+            const btn = document.getElementById(`btn-${tabId}`);
+            btn.classList.remove('border-transparent', 'text-slate-400');
+            btn.classList.add('border-tgf-accent', 'text-tgf-accent');
+            activeTab = tabId;
+
+            if (tabId === 't2') { populateT2Dropdowns(); filterAndRenderT2(); }
+            if (tabId === 't3') { renderQualityIssues(); }
+            if (tabId === 't4') { populateColumnSelects(); calculateStats(); }
+            if (tabId === 't5') { populateColumnSelects(); runOutlierAnalysis(); }
+            if (tabId === 't6') { renderChangeLog(); }
+        }
+
+        // File Upload Handler
+        document.getElementById('csv-file-input').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            Papa.parse(file, {
+                header: true,
+                dynamicTyping: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    if (results.data && results.data.length > 0) {
+                        ingestDataset(results.data, file.name);
+                    } else {
+                        showToast('CSV file is empty or invalid.', 'danger');
+                    }
+                },
+                error: function(err) {
+                    showToast('Error parsing CSV: ' + err.message, 'danger');
+                }
+            });
+        });
+
+        // Load Sample Data (TGF Shipboard Telemetry & Incident Log)
+        function loadSampleData() {
+            const sampleCSV = `RecordID,Timestamp,SystemUnit,Severity,Reading,AnomalyFlag,Description,Notes
+REC-101,2075-03-01 04:12,Reactor Core A,Normal,45.2,False,Primary thermal regulation stable within nominal operational thresholds.,All coolant loops verified.
+REC-102,2075-03-01 04:15,Life Support,Warning,88.9,True,O2 scrubber efficiency dropped slightly in Sector 4 habitat ring.,Investigate filter buildup.
+REC-103,2075-03-01 04:20,Navigation,Normal,12.4,False,Subspace drift corrected automatically by inertial guidance array.,No manual intervention required.
+REC-102,2075-03-01 04:15,Life Support,Warning,88.9,True,O2 scrubber efficiency dropped slightly in Sector 4 habitat ring.,Duplicate entry test record.
+REC-104,2075-03-01 04:30,Shield Generator,Critical,142.6,True,Gravimetric capacitor surge detected during micro-meteorite deflection.,Capacitor bank B overheated.
+REC-105,2075-03-01 04:45,Reactor Core A,Normal,46.1,False,Thermal output normalized following coolant pulse.,Stable.
+REC-106,2075-03-01 05:00,Propulsion,Invalid,-999.0,True,Telemetry packet corrupted due to solar flare interference.,Sensor recalibration needed.
+REC-107,2075-03-01 05:12,Life Support,Normal,78.2,False,Carbon dioxide filtration operating at 98.4% efficiency.,Optimal air quality.
+REC-108,2075-03-01 05:30,Navigation,,14.1,False,Routine course correction for Oort cloud proximity.,None.
+REC-109,2075-03-01 06:00,Shield Generator,Normal,55.0,False,Shield harmonics synchronized across all deflector emitters.,Ready.
+REC-110,2075-03-01 06:15,Reactor Core A,Critical,210.5,True,Unexplained core temperature spike exceeding safety threshold delta.,Immediate inspection required by senior analyst!`;
+
+            Papa.parse(sampleCSV, {
+                header: true,
+                dynamicTyping: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    ingestDataset(results.data, 'TGF_Sample_Telemetry_2075.csv');
+                    showToast('Loaded sample TGF telemetry dataset successfully.', 'success');
+                }
+            });
+        }
+
+        // Ingest Dataset & Type Detection
+        function ingestDataset(data, filename) {
+            originalData = JSON.parse(JSON.stringify(data));
+            workingData = JSON.parse(JSON.stringify(data));
+            columns = Object.keys(data[0] || {});
+            
+            detectDataTypes();
+            
+            // Update UI indicators
+            document.getElementById('dataset-status').innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-500"></span> Loaded: ${filename} (${workingData.length} rows)`;
+            document.getElementById('stat-total-rows').innerText = workingData.length;
+            document.getElementById('stat-total-cols').innerText = columns.length;
+            document.getElementById('stat-memory').innerText = `${Math.round(JSON.stringify(workingData).length / 1024)} KB`;
+            document.getElementById('stat-integrity').innerText = 'Ready for Audit';
+            document.getElementById('stat-integrity').className = 'text-2xl font-bold text-sky-400 mt-1';
+
+            document.getElementById('schema-container').classList.remove('hidden');
+            document.getElementById('schema-table-card').classList.remove('hidden');
+            document.getElementById('raw-preview-card').classList.remove('hidden');
+
+            renderSchemaTable();
+            renderRawPreview();
+            populateColumnSelects();
+            runQualityAudit();
+        }
+
+        // Auto-detect data types
+        function detectDataTypes() {
+            columnTypes = {};
+            columns.forEach(col => {
+                let nonNulls = workingData.filter(r => r[col] !== null && r[col] !== undefined && r[col] !== '');
+                if (nonNulls.length === 0) {
+                    columnTypes[col] = 'String';
+                    return;
+                }
+                let numericCount = nonNulls.filter(r => typeof r[col] === 'number' && !isNaN(r[col])).length;
+                let boolCount = nonNulls.filter(r => typeof r[col] === 'boolean' || String(r[col]).toLowerCase() === 'true' || String(r[col]).toLowerCase() === 'false').length;
+                let dateCount = nonNulls.filter(r => !isNaN(Date.parse(r[col])) && String(r[col]).length > 6).length;
+
+                if (numericCount / nonNulls.length > 0.8) {
+                    columnTypes[col] = 'Numeric';
+                } else if (boolCount / nonNulls.length > 0.8) {
+                    columnTypes[col] = 'Boolean';
+                } else if (dateCount / nonNulls.length > 0.8) {
+                    columnTypes[col] = 'Date';
+                } else {
+                    columnTypes[col] = 'String';
+                }
+            });
+        }
+
+        // Render Schema Table (T1)
+        function renderSchemaTable() {
+            const tbody = document.getElementById('schema-table-body');
+            tbody.innerHTML = '';
+            columns.forEach(col => {
+                const nonNulls = workingData.filter(r => r[col] !== null && r[col] !== undefined && r[col] !== '').length;
+                const sampleVals = workingData.slice(0, 3).map(r => r[col]).join(', ');
+                const typeBadge = getTypeBadge(columnTypes[col]);
+                
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-900/40 transition';
+                tr.innerHTML = `
+                    <td class="p-3 font-medium text-slate-200">${col}</td>
+                    <td class="p-3">${typeBadge}</td>
+                    <td class="p-3 text-slate-400 truncate max-w-xs">${sampleVals}</td>
+                    <td class="p-3 text-slate-300">${nonNulls} / ${workingData.length}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function getTypeBadge(type) {
+            switch(type) {
+                case 'Numeric': return '<span class="px-2 py-0.5 rounded text-[11px] bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">Numeric</span>';
+                case 'Boolean': return '<span class="px-2 py-0.5 rounded text-[11px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Boolean</span>';
+                case 'Date': return '<span class="px-2 py-0.5 rounded text-[11px] bg-amber-500/20 text-amber-400 border border-amber-500/30">Date</span>';
+                default: return '<span class="px-2 py-0.5 rounded text-[11px] bg-sky-500/20 text-sky-400 border border-sky-500/30">String</span>';
+            }
+        }
+
+        // Render Raw Preview (T1)
+        function renderRawPreview() {
+            const head = document.getElementById('raw-table-head');
+            const body = document.getElementById('raw-table-body');
+            head.innerHTML = '';
+            body.innerHTML = '';
+
+            if (workingData.length === 0) return;
+
+            let trHead = document.createElement('tr');
+            trHead.innerHTML = '<th class="p-3">#</th>' + columns.map(c => `<th class="p-3">${c}</th>`).join('');
+            head.appendChild(trHead);
+
+            const previewRows = workingData.slice(0, 50);
+            document.getElementById('preview-count-label').innerText = `Showing ${previewRows.length} of ${workingData.length} records`;
+
+            previewRows.forEach((row, idx) => {
+                let tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-900/60 transition';
+                let html = `<td class="p-3 text-slate-500">${idx + 1}</td>`;
+                columns.forEach(col => {
+                    let val = row[col] !== undefined && row[col] !== null ? row[col] : '';
+                    if (String(val).length > 40) {
+                        html += `<td class="p-3 text-slate-300 cursor-pointer text-sky-400 hover:underline" onclick="openTextModal('${col} (Row ${idx+1})', \`${val.replace(/"/g, '&quot;')}\`)">${val.substring(0, 37)}... <i class="fa-solid fa-expand text-[10px]"></i></td>`;
+                    } else {
+                        html += `<td class="p-3 text-slate-300">${val}</td>`;
+                    }
+                });
+                tr.innerHTML = html;
+                body.appendChild(tr);
+            });
+        }
+
+        // --- T2 Explorer & Filter Logic ---
+        function populateT2Dropdowns() {
+            const sortCol = document.getElementById('t2-sort-col');
+            const filterCol = document.getElementById('t2-filter-col');
+            sortCol.innerHTML = '<option value="">Sort by Column...</option>';
+            filterCol.innerHTML = '<option value="">Select Column...</option>';
+            columns.forEach(col => {
+                sortCol.innerHTML += `<option value="${col}">${col}</option>`;
+                filterCol.innerHTML += `<option value="${col}">${col}</option>`;
+            });
+        }
+
+        let activeFilter = { col: '', val: '' };
+        function applyT2Filter() {
+            activeFilter.col = document.getElementById('t2-filter-col').value;
+            activeFilter.val = document.getElementById('t2-filter-val').value.trim().toLowerCase();
+            filterAndRenderT2();
+        }
+
+        function clearT2Filter() {
+            document.getElementById('t2-filter-col').value = '';
+            document.getElementById('t2-filter-val').value = '';
+            document.getElementById('t2-search').value = '';
+            activeFilter = { col: '', val: '' };
+            filterAndRenderT2();
+        }
+
+        function filterAndRenderT2() {
+            if (workingData.length === 0) return;
+            const searchTerm = document.getElementById('t2-search').value.toLowerCase();
+            const sortCol = document.getElementById('t2-sort-col').value;
+            const sortDir = document.getElementById('t2-sort-dir').value;
+
+            let filtered = workingData.filter((row, idx) => {
+                // Global search
+                let matchesSearch = searchTerm === '' || columns.some(col => String(row[col] || '').toLowerCase().includes(searchTerm));
+                // Column filter
+                let matchesColFilter = true;
+                if (activeFilter.col && activeFilter.val !== '') {
+                    let cellVal = String(row[activeFilter.col] || '').toLowerCase();
+                    matchesColFilter = cellVal.includes(activeFilter.val);
+                }
+                return matchesSearch && matchesColFilter;
+            });
+
+            // Sorting
+            if (sortCol) {
+                filtered.sort((a, b) => {
+                    let valA = a[sortCol];
+                    let valB = b[sortCol];
+                    if (valA === null || valA === undefined) valA = '';
+                    if (valB === null || valB === undefined) valB = '';
+                    if (typeof valA === 'number' && typeof valB === 'number') {
+                        return sortDir === 'asc' ? valA - valB : valB - valA;
+                    }
+                    return sortDir === 'asc' ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
+                });
+            }
+
+            document.getElementById('t2-match-count').innerText = `Showing ${filtered.length} of ${workingData.length} records`;
+
+            // Render T2 Table
+            const head = document.getElementById('t2-table-head');
+            const body = document.getElementById('t2-table-body');
+            head.innerHTML = '';
+            body.innerHTML = '';
+
+            let trHead = document.createElement('tr');
+            trHead.innerHTML = '<th class="p-3">#</th>' + columns.map(c => `<th class="p-3">${c}</th>`).join('') + '<th class="p-3 text-right">Actions</th>';
+            head.appendChild(trHead);
+
+            if (filtered.length === 0) {
+                body.innerHTML = `<tr><td colspan="${columns.length + 2}" class="text-center py-8 text-slate-500">No records match the current query filter.</td></tr>`;
+                return;
+            }
+
+            filtered.forEach((row, idx) => {
+                let tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-900/60 transition';
+                let html = `<td class="p-3 text-slate-500">${idx + 1}</td>`;
+                columns.forEach(col => {
+                    let val = row[col] !== undefined && row[col] !== null ? row[col] : '';
+                    if (String(val).length > 35) {
+                        html += `<td class="p-3 text-slate-300"><span class="text-sky-400 hover:underline cursor-pointer" onclick="openTextModal('${col}', \`${val.replace(/"/g, '&quot;')}\`)">${val.substring(0, 32)}...</span></td>`;
+                    } else {
+                        html += `<td class="p-3 text-slate-300">${val}</td>`;
+                    }
+                });
+                html += `<td class="p-3 text-right"><button onclick="inspectRowDetail(${idx})" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-xs text-sky-400"><i class="fa-solid fa-eye"></i></button></td>`;
+                tr.innerHTML = html;
+                body.appendChild(tr);
+            });
+        }
+
+        function inspectRowDetail(idx) {
+            const row = workingData[idx];
+            let content = Object.entries(row).map(([k, v]) => `<strong>${k}:</strong> ${v}`).join('\n');
+            openTextModal(`Complete Record Description (Row ${idx + 1})`, content);
+        }
+
+        function openTextModal(title, text) {
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-body').innerText = text;
+            document.getElementById('text-modal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('text-modal').classList.add('hidden');
+        }
+
+        // --- T3 Quality Inspector & Cleansing Logic ---
+        function runQualityAudit() {
+            qualityIssues = [];
+            if (workingData.length === 0) return;
+
+            // 1. Detect Duplicates
+            let seenRows = new Map();
+            workingData.forEach((row, idx) => {
+                let keyStr = JSON.stringify(row);
+                if (seenRows.has(keyStr)) {
+                    qualityIssues.push({
+                        rowIdx: idx,
+                        type: 'duplicate',
+                        column: 'Entire Row',
+                        currentValue: 'Exact duplicate of Row ' + (seenRows.get(keyStr) + 1),
+                        suggested: 'Remove duplicate record'
+                    });
+                } else {
+                    seenRows.set(keyStr, idx);
+                }
+            });
+
+            // 2. Detect Missing / Invalid / Conflicting IDs
+            let idMap = new Map();
+            const idCol = columns.find(c => c.toLowerCase().includes('id')) || columns[0];
+
+            workingData.forEach((row, idx) => {
+                columns.forEach(col => {
+                    let val = row[col];
+                    // Missing
+                    if (val === null || val === undefined || String(val).trim() === '') {
+                        qualityIssues.push({
+                            rowIdx: idx,
+                            type: 'missing',
+                            column: col,
+                            currentValue: '[Null / Empty]',
+                            suggested: columnTypes[col] === 'Numeric' ? 'Fill with Median (0)' : 'Fill with "Unknown"'
+                        });
+                    }
+                    // Invalid (e.g. numeric column with string or out-of-range sentinel like -999)
+                    if (columnTypes[col] === 'Numeric') {
+                        if (typeof val === 'number' && (val === -999 || isNaN(val))) {
+                            qualityIssues.push({
+                                rowIdx: idx,
+                                type: 'invalid',
+                                column: col,
+                                currentValue: val,
+                                suggested: 'Replace with Column Median'
+                            });
+                        }
+                    }
+                });
+
+                // Conflicting IDs (same ID with different values in other columns)
+                if (idCol && row[idCol]) {
+                    let idVal = row[idCol];
+                    if (idMap.has(idVal)) {
+                        let prevIdx = idMap.get(idVal);
+                        let prevRow = workingData[prevIdx];
+                        // check if other columns differ significantly
+                        let differs = columns.some(c => c !== idCol && prevRow[c] !== row[c]);
+                        if (differs) {
+                            qualityIssues.push({
+                                rowIdx: idx,
+                                type: 'conflict',
+                                column: idCol,
+                                currentValue: `ID ${idVal} conflicts with Row ${prevIdx + 1}`,
+                                suggested: 'Merge or resolve conflicting telemetry'
+                            });
+                        }
+                    } else {
+                        idMap.set(idVal, idx);
+                    }
+                }
+            });
+
+            // Update UI count cards
+            document.getElementById('audit-dup-count').innerText = qualityIssues.filter(i => i.type === 'duplicate').length;
+            document.getElementById('audit-missing-count').innerText = qualityIssues.filter(i => i.type === 'missing').length;
+            document.getElementById('audit-invalid-count').innerText = qualityIssues.filter(i => i.type === 'invalid').length;
+            document.getElementById('audit-conflict-count').innerText = qualityIssues.filter(i => i.type === 'conflict').length;
+
+            document.getElementById('stat-integrity').innerText = qualityIssues.length === 0 ? 'Fully Verified' : `${qualityIssues.length} Anomalies Found`;
+            document.getElementById('stat-integrity').className = qualityIssues.length === 0 ? 'text-2xl font-bold text-emerald-400 mt-1' : 'text-2xl font-bold text-amber-400 mt-1';
+
+            renderQualityIssues();
+            showToast(`Quality audit complete. Detected ${qualityIssues.length} anomalies.`, qualityIssues.length > 0 ? 'warning' : 'success');
+        }
+
+        function renderQualityIssues() {
+            const tbody = document.getElementById('quality-issues-tbody');
+            const filterType = document.getElementById('issue-filter').value;
+            tbody.innerHTML = '';
+
+            let filtered = qualityIssues.filter(i => filterType === 'all' || i.type === filterType);
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="text-center py-6 text-slate-500">No anomalies found matching filter criteria.</td></tr>`;
+                return;
+            }
+
+            filtered.forEach((issue, index) => {
+                let badgeCol = issue.type === 'duplicate' ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' :
+                               issue.type === 'missing' ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
+                               issue.type === 'invalid' ? 'bg-orange-500/20 text-orange-400 border-orange-500/30' : 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+
+                let tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-900/60 transition';
+                tr.innerHTML = `
+                    <td class="p-3 text-slate-300 font-medium">${issue.rowIdx + 1}</td>
+                    <td class="p-3"><span class="px-2 py-0.5 rounded text-[11px] border ${badgeCol} uppercase">${issue.type}</span></td>
+                    <td class="p-3 text-slate-300">${issue.column}</td>
+                    <td class="p-3 text-rose-400 font-mono">${issue.currentValue}</td>
+                    <td class="p-3 text-slate-300">${issue.suggested}</td>
+                    <td class="p-3 text-right">
+                        ${issue.type === 'duplicate' ? `<button onclick="resolveDuplicate(${issue.rowIdx})" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded text-xs">Remove</button>` :
+                          `<button onclick="openCellEditor(${issue.rowIdx}, '${issue.column}')" class="px-2.5 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded text-xs">Edit Cell</button>`}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function resolveDuplicate(rowIdx) {
+            let removedRow = workingData.splice(rowIdx, 1)[0];
+            changeLog.push({
+                timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+                rowIdx: rowIdx + 1,
+                column: 'Entire Row',
+                original: JSON.stringify(removedRow),
+                newValue: '[Removed Duplicate]',
+                method: 'Manual Removal',
+                reason: 'Duplicate record elimination to maintain dataset uniqueness.'
+            });
+            showToast(`Removed duplicate record at row ${rowIdx + 1}.`, 'success');
+            runQualityAudit();
+            renderRawPreview();
+        }
+
+        function openCellEditor(rowIdx, column) {
+            let newVal = prompt(`Enter corrected value for Row ${rowIdx + 1}, Column "${column}":`, workingData[rowIdx][column]);
+            if (newVal !== null) {
+                let origVal = workingData[rowIdx][column];
+                // Type conversion if numeric
+                if (columnTypes[column] === 'Numeric' && !isNaN(newVal)) {
+                    newVal = Number(newVal);
+                }
+                workingData[rowIdx][column] = newVal;
+                changeLog.push({
+                    timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+                    rowIdx: rowIdx + 1,
+                    column: column,
+                    original: origVal,
+                    newValue: newVal,
+                    method: 'Manual Cell Correction',
+                    reason: 'Correcting anomaly detected during T3 quality inspection.'
+                });
+                showToast(`Updated Row ${rowIdx + 1}, ${column}.`, 'success');
+                runQualityAudit();
+                renderRawPreview();
+            }
+        }
+
+        function applyAutoCorrections() {
+            let correctionsCount = 0;
+            // Auto correction rule 1: Remove exact duplicates
+            let seen = new Set();
+            let cleaned = [];
+            workingData.forEach((row, idx) => {
+                let sig = JSON.stringify(row);
+                if (seen.has(sig)) {
+                    correctionsCount++;
+                    changeLog.push({
+                        timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+                        rowIdx: idx + 1,
+                        column: 'Entire Row',
+                        original: 'Duplicate row',
+                        newValue: '[Dropped]',
+                        method: 'Auto-Correction Rule: Deduplicate',
+                        reason: 'Automated removal of identical record signature.'
+                    });
+                } else {
+                    seen.add(sig);
+                    cleaned.push(row);
+                }
+            });
+            workingData = cleaned;
+
+            // Auto correction rule 2: Fill missing numeric values with column median
+            columns.forEach(col => {
+                if (columnTypes[col] === 'Numeric') {
+                    let nums = workingData.map(r => r[col]).filter(v => typeof v === 'number' && !isNaN(v) && v !== -999);
+                    nums.sort((a,b) => a - b);
+                    let median = nums.length > 0 ? nums[Math.floor(nums.length / 2)] : 0;
+
+                    workingData.forEach((row, idx) => {
+                        if (row[col] === null || row[col] === undefined || row[col] === '' || row[col] === -999) {
+                            let orig = row[col];
+                            row[col] = median;
+                            correctionsCount++;
+                            changeLog.push({
+                                timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+                                rowIdx: idx + 1,
+                                column: col,
+                                original: orig,
+                                newValue: median,
+                                method: 'Auto-Correction Rule: Median Imputation',
+                                reason: 'Replacing missing/invalid numeric value with column median.'
+                            });
+                        }
+                    });
+                }
+            });
+
+            showToast(`Applied auto-corrections: ${correctionsCount} modifications executed.`, 'success');
+            runQualityAudit();
+            renderRawPreview();
+        }
+
+        // --- T4 Descriptive Statistics Engine ---
+        function populateColumnSelects() {
+            const t4Select = document.getElementById('t4-col-select');
+            const t5Select = document.getElementById('t5-col-select');
+            t4Select.innerHTML = '<option value="">Choose Column...</option>';
+            t5Select.innerHTML = '<option value="">Choose Column...</option>';
+
+            columns.forEach(col => {
+                if (columnTypes[col] === 'Numeric') {
+                    t4Select.innerHTML += `<option value="${col}">${col}</option>`;
+                    t5Select.innerHTML += `<option value="${col}">${col}</option>`;
+                }
+            });
+            if (t4Select.options.length > 1) {
+                t4Select.selectedIndex = 1;
+                t5Select.selectedIndex = 1;
+            }
+        }
+
+        function calculateStats() {
+            const col = document.getElementById('t4-col-select').value;
+            if (!col || workingData.length === 0) return;
+
+            let values = workingData.map(r => r[col]).filter(v => typeof v === 'number' && !isNaN(v));
+            if (values.length === 0) {
+                showToast('Selected column contains no valid numeric values.', 'warning');
+                return;
+            }
+
+            values.sort((a, b) => a - b);
+            let count = values.length;
+            let total = values.reduce((acc, val) => acc + val, 0);
+            let mean = total / count;
+            
+            // Median
+            let median = count % 2 === 0 ? (values[count/2 - 1] + values[count/2]) / 2 : values[Math.floor(count/2)];
+
+            // Mode
+            let counts = {};
+            let maxFreq = 0;
+            values.forEach(v => {
+                counts[v] = (counts[v] || 0) + 1;
+                if (counts[v] > maxFreq) maxFreq = counts[v];
+            });
+            let modes = Object.keys(counts).filter(k => counts[k] === maxFreq).map(Number);
+            let modeStr = maxFreq > 1 ? modes.join(', ') : 'No Mode (Unique)';
+
+            let min = values[0];
+            let max = values[values.length - 1];
+            let range = max - min;
+
+            // Population Standard Deviation
+            let variance = values.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / count;
+            let stdDev = Math.sqrt(variance);
+
+            // Display in T4 cards
+            document.getElementById('stat-count').innerText = count;
+            document.getElementById('stat-total').innerText = total.toLocaleString(undefined, {maximumFractionDigits: 2});
+            document.getElementById('stat-mean').innerText = mean.toLocaleString(undefined, {maximumFractionDigits: 2});
+            document.getElementById('stat-median').innerText = median.toLocaleString(undefined, {maximumFractionDigits: 2});
+            document.getElementById('stat-mode').innerText = modeStr;
+            document.getElementById('stat-min').innerText = min.toLocaleString();
+            document.getElementById('stat-max').innerText = max.toLocaleString();
+            document.getElementById('stat-range').innerText = range.toLocaleString();
+            document.getElementById('stat-stddev').innerText = stdDev.toLocaleString(undefined, {maximumFractionDigits: 2});
+        }
+
+        // --- T5 Outlier & Chart Logic ---
+        function runOutlierAnalysis() {
+            const col = document.getElementById('t5-col-select').value;
+            if (!col || workingData.length === 0) return;
+
+            let dataPoints = workingData.map((r, i) => ({ idx: i, val: r[col] })).filter(d => typeof d.val === 'number' && !isNaN(d.val));
+            if (dataPoints.length === 0) return;
+
+            let vals = dataPoints.map(d => d.val).sort((a, b) => a - b);
+            let n = vals.length;
+
+            // Inclusive quartiles (median splitting)
+            function getMedian(arr) {
+                let mid = Math.floor(arr.length / 2);
+                return arr.length % 2 !== 0 ? arr[mid] : (arr[mid - 1] + arr[mid]) / 2;
+            }
+
+            let midIdx = Math.floor(n / 2);
+            let lowerHalf = vals.slice(0, midIdx);
+            let upperHalf = n % 2 !== 0 ? vals.slice(midIdx + 1) : vals.slice(midIdx);
+
+            let q1 = getMedian(lowerHalf);
+            let q3 = getMedian(upperHalf);
+            let iqr = q3 - q1;
+            let lowerFence = q1 - 1.5 * iqr;
+            let upperFence = q3 + 1.5 * iqr;
+
+            let outliers = dataPoints.filter(d => d.val < lowerFence || d.val > upperFence);
+            let cleanPoints = dataPoints.filter(d => d.val >= lowerFence && d.val <= upperFence);
+
+            document.getElementById('outlier-count').innerText = outliers.length;
+            document.getElementById('outlier-fences').innerText = `Fences: [${lowerFence.toFixed(1)} to ${upperFence.toFixed(1)}] (Q1=${q1}, Q3=${q3})`;
+
+            // Comparative metrics
+            let meanWith = vals.reduce((a, b) => a + b, 0) / n;
+            let meanWithout = cleanPoints.reduce((a, b) => a + b, 0) / (cleanPoints.length || 1);
+
+            let stdWith = Math.sqrt(vals.reduce((a, b) => a + Math.pow(b - meanWith, 2), 0) / n);
+            let stdWithout = Math.sqrt(cleanPoints.reduce((a, b) => a + Math.pow(b - meanWithout, 2), 0) / (cleanPoints.length || 1));
+
+            document.getElementById('outlier-mean-comp').innerText = `${meanWith.toFixed(1)} vs ${meanWithout.toFixed(1)}`;
+            document.getElementById('outlier-std-comp').innerText = `${stdWith.toFixed(1)} vs ${stdWithout.toFixed(1)}`;
+
+            renderT5Chart(dataPoints, lowerFence, upperFence, col);
+        }
+
+        function renderT5Chart(dataPoints, lowerFence, upperFence, colName) {
+            const ctx = document.getElementById('t5-chart').getContext('2d');
+            if (t5ChartInstance) t5ChartInstance.destroy();
+
+            let labels = dataPoints.map((d, i) => `Row ${d.idx + 1}`);
+            let values = dataPoints.map(d => d.val);
+            let pointColors = dataPoints.map(d => (d.val < lowerFence || d.val > upperFence) ? '#ef4444' : '#38bdf8');
+
+            t5ChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: colName,
+                        data: values,
+                        backgroundColor: pointColors,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let val = context.raw;
+                                    let isOutlier = val < lowerFence || val > upperFence;
+                                    return `${colName}: ${val} ${isOutlier ? '(OUTLIER)' : ''}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8' } },
+                        y: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8' } }
+                    }
+                }
+            });
+        }
+
+        // --- T6 Export & Change Log Logic ---
+        function renderChangeLog() {
+            const tbody = document.getElementById('changelog-tbody');
+            tbody.innerHTML = '';
+
+            if (changeLog.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center py-6 text-slate-500">No modifications recorded yet. Original data remains pristine.</td></tr>`;
+                return;
+            }
+
+            changeLog.forEach(log => {
+                let tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-900/60 transition';
+                tr.innerHTML = `
+                    <td class="p-3 text-slate-400 font-mono text-[11px]">${log.timestamp}</td>
+                    <td class="p-3 text-slate-300 font-medium">${log.rowIdx}</td>
+                    <td class="p-3 text-slate-300">${log.column}</td>
+                    <td class="p-3 text-rose-400 font-mono">${log.original}</td>
+                    <td class="p-3 text-emerald-400 font-mono">${log.newValue}</td>
+                    <td class="p-3 text-sky-400">${log.method}</td>
+                    <td class="p-3 text-slate-400">${log.reason}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function exportCleanedCSV() {
+            if (workingData.length === 0) {
+                showToast('No active dataset to export.', 'danger');
+                return;
+            }
+
+            // Ensure unique records in export (remove exact duplicates)
+            let uniqueMap = new Set();
+            let finalExportRows = [];
+            workingData.forEach(row => {
+                let sig = JSON.stringify(row);
+                if (!uniqueMap.has(sig)) {
+                    uniqueMap.add(sig);
+                    finalExportRows.push(row);
+                }
+            });
+
+            let csv = Papa.unparse(finalExportRows);
+            let blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            let url = URL.createObjectURL(blob);
+            let a = document.createElement('a');
+            a.setAttribute('href', url);
+            a.setAttribute('download', `TGF_Cleaned_Dataset_${new Date().toISOString().slice(0,10)}.csv`);
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+
+            showToast(`Exported cleaned CSV successfully (${finalExportRows.length} unique records). Original dataset preserved.`, 'success');
+        }
+    </script>
+</body>
+</html>
